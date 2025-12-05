@@ -1,0 +1,103 @@
+Sample Sensor Data Stream Format
+=================================
+
+This is a reference showing what realistic IoT sensor data might look like.
+Your test harness should simulate similar data patterns.
+
+Example Data Structure (from README):
+-------------------------------------
+typedef struct {
+    uint64_t timestamp;  // Unix timestamp in milliseconds
+    float temperature;   // Degrees Celsius
+    float humidity;      // Percentage (0-100)
+    uint16_t sensor_id;  // Device identifier
+} __attribute__((packed)) sensor_reading_t;
+
+Size: 18 bytes per reading (8 + 4 + 4 + 2)
+
+
+Sample Data Stream (10 readings):
+---------------------------------
+Reading 1:  timestamp=1701878400000  temp=22.5°C  humidity=45.2%  sensor_id=101
+Reading 2:  timestamp=1701878401000  temp=22.6°C  humidity=45.1%  sensor_id=101
+Reading 3:  timestamp=1701878402000  temp=22.7°C  humidity=45.3%  sensor_id=101
+Reading 4:  timestamp=1701878403000  temp=22.8°C  humidity=45.0%  sensor_id=101
+Reading 5:  timestamp=1701878404000  temp=22.9°C  humidity=44.8%  sensor_id=101
+Reading 6:  timestamp=1701878405000  temp=23.0°C  humidity=44.9%  sensor_id=101
+Reading 7:  timestamp=1701878406000  temp=23.1°C  humidity=45.1%  sensor_id=101
+Reading 8:  timestamp=1701878407000  temp=23.0°C  humidity=45.2%  sensor_id=101
+Reading 9:  timestamp=1701878408000  temp=22.9°C  humidity=45.3%  sensor_id=101
+Reading 10: timestamp=1701878409000  temp=22.8°C  humidity=45.4%  sensor_id=101
+
+
+Test Scenarios to Consider:
+---------------------------
+
+1. High-Frequency Streams:
+   - 100+ readings per second (10ms intervals)
+   - Buffer capacity: 1024 bytes = ~56 readings
+   - Test wraparound after filling buffer
+
+2. Burst Patterns:
+   - Write 100 readings quickly
+   - Read 50 readings
+   - Write 30 more (tests circular behavior)
+
+3. Power Cycle Simulation:
+   - Write several readings
+   - Destroy buffer (close file)
+   - Create new buffer (reopen file)
+   - Verify all readings are intact and readable
+
+4. Edge Cases:
+   - Empty buffer: Try reading when nothing was written
+   - Full buffer: Write until full, then attempt one more write
+   - Partial reads: Request 100 bytes when only 18 bytes available
+   - Misaligned sizes: Write 10 bytes when struct is 18 bytes
+
+
+Helper Functions You Might Implement:
+-------------------------------------
+
+// Generate fake sensor data for testing
+sensor_reading_t generate_sensor_reading(uint16_t sensor_id) {
+    sensor_reading_t reading;
+    reading.timestamp = get_current_timestamp_ms();
+    reading.temperature = 20.0 + (rand() % 100) / 10.0;  // 20-30°C
+    reading.humidity = 40.0 + (rand() % 200) / 10.0;     // 40-60%
+    reading.sensor_id = sensor_id;
+    return reading;
+}
+
+// Print reading for debugging
+void print_sensor_reading(const sensor_reading_t* reading) {
+    printf("timestamp=%lu temp=%.1f°C humidity=%.1f%% sensor_id=%u\n",
+           reading->timestamp,
+           reading->temperature,
+           reading->humidity,
+           reading->sensor_id);
+}
+
+// Compare two readings for test validation
+bool readings_equal(const sensor_reading_t* a, const sensor_reading_t* b) {
+    return a->timestamp == b->timestamp &&
+           fabsf(a->temperature - b->temperature) < 0.01 &&
+           fabsf(a->humidity - b->humidity) < 0.01 &&
+           a->sensor_id == b->sensor_id;
+}
+
+
+Performance Expectations:
+------------------------
+- Writing 1000 readings should take < 100ms
+- Reading 1000 readings should take < 100ms
+- File-backed persistence should be transparent to API user
+- Buffer wraparound should have no performance penalty
+
+
+Notes:
+------
+- Use __attribute__((packed)) to ensure struct has no padding
+- Always write entire structs, don't split sensor readings across writes
+- On Windows, use #pragma pack(1) if __attribute__ doesn't work
+- Consider byte order if you want cross-platform file compatibility (not required)
